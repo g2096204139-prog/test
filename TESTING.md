@@ -14,9 +14,19 @@
 
 ## 指令測試
 ```bash
-gradle :app:testDebugUnitTest
-gradle :app:connectedDebugAndroidTest
-gradle :app:lint
+./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
+./gradlew :app:lint
+./gradlew :app:connectedDebugAndroidTest
+```
+
+Windows PowerShell 可使用：
+
+```powershell
+.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:testDebugUnitTest
+.\gradlew.bat :app:lint
+.\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
 ## 已加入的自動化測試
@@ -29,5 +39,8 @@ gradle :app:lint
 ## CI（GitHub Actions）
 - 已新增 `.github/workflows/android-ci.yml`。
 - CI 會固定使用 Java 17，並安裝 Android 34 所需 SDK 元件後執行：
-  - `gradle :app:testDebugUnitTest`
-  - `gradle :app:lint`
+  - `./gradlew :app:assembleDebug`
+  - `./gradlew :app:testDebugUnitTest`
+  - `./gradlew :app:lint`
+
+`connectedDebugAndroidTest` 需要已啟動的 Android emulator 或實機，因此目前列為本機/裝置測試指令。

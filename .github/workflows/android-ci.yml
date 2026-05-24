@@ -28,8 +28,14 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug
+
       - name: Run unit tests
-        run: gradle :app:testDebugUnitTest
+        run: ./gradlew :app:testDebugUnitTest
 
       - name: Run lint
-        run: gradle :app:lint
+        run: ./gradlew :app:lint
