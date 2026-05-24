@@ -80,6 +80,11 @@ fun AppNav() {
     }
 }
 
+private fun normalizeEtfSymbol(symbol: String): String {
+    val trimmed = symbol.trim().uppercase()
+    return if (trimmed.matches(Regex("""\d{4,6}[A-Z]?"""))) "$trimmed.TW" else trimmed
+}
+
 @Composable
 fun DashboardPage() {
     val context = LocalContext.current
@@ -181,6 +186,8 @@ fun EtfPage() {
     var newCost by remember { mutableStateOf("") }
     val prefs = remember { Prefs(context) }
     var lastUpdatedText by remember { mutableStateOf("尚未更新") }
+    var updateStatus by remember { mutableStateOf("") }
+    var isUpdating by remember { mutableStateOf(false) }
 
     fun load() {
         scope.launch(Dispatchers.IO) {
@@ -197,11 +204,11 @@ fun EtfPage() {
 
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("新增/更新持倉", style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(value = newSymbol, onValueChange = { newSymbol = it.uppercase() }, label = { Text("代碼（例：VTI / 0050.TW）") })
+        OutlinedTextField(value = newSymbol, onValueChange = { newSymbol = it.uppercase() }, label = { Text("代碼（例：VTI / 0050）") })
         OutlinedTextField(value = newShares, onValueChange = { newShares = it }, label = { Text("股數") })
         OutlinedTextField(value = newCost, onValueChange = { newCost = it }, label = { Text("平均成本") })
         Button(onClick = {
-            val symbol = newSymbol.trim()
+            val symbol = normalizeEtfSymbol(newSymbol)
             val shares = newShares.toDoubleOrNull() ?: return@Button
             val avgCost = newCost.toDoubleOrNull() ?: return@Button
             if (symbol.isEmpty()) return@Button
@@ -219,11 +226,57 @@ fun EtfPage() {
         Divider()
         Text("最近更新：$lastUpdatedText")
 
-        Button(onClick = {
-            val req = OneTimeWorkRequestBuilder<DailyUpdateWorker>().build()
-            WorkManager.getInstance(context).enqueue(req)
-            load()
-        }) { Text("手動更新 ETF 報價") }
+        Button(
+            enabled = !isUpdating,
+            onClick = {
+                isUpdating = true
+                updateStatus = "更新中..."
+                scope.launch(Dispatchers.IO) {
+                    val current = db.etfHoldingDao().all()
+                    if (current.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            isUpdating = false
+                            updateStatus = "尚無持倉可更新"
+                        }
+                        return@launch
+                    }
+
+                    val prices = try {
+                        PriceRepository().fetchPrices(current.map { it.symbol })
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            isUpdating = false
+                            updateStatus = "更新失敗：${e.message ?: e::class.java.simpleName}"
+                        }
+                        return@launch
+                    }
+
+                    if (prices.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            isUpdating = false
+                            updateStatus = "找不到報價，請確認 ETF 代碼（例：VTI / 0050）"
+                        }
+                        return@launch
+                    }
+
+                    val updated = current.map { h -> h.copy(lastPrice = prices[h.symbol] ?: h.lastPrice) }
+                    db.etfHoldingDao().upsertAll(updated)
+                    db.assetSnapshotDao().insert(
+                        AssetSnapshot(date = LocalDate.now().toString(), totalAsset = updated.sumOf { it.shares * it.lastPrice })
+                    )
+                    prefs.setLastUpdateEpochMs(System.currentTimeMillis())
+
+                    withContext(Dispatchers.Main) {
+                        isUpdating = false
+                        updateStatus = "已更新 ${prices.size}/${current.size} 筆報價"
+                        load()
+                    }
+                }
+            }
+        ) { Text(if (isUpdating) "更新中..." else "手動更新 ETF 報價") }
+        if (updateStatus.isNotBlank()) {
+            Text(updateStatus)
+        }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(holdings) { h ->
