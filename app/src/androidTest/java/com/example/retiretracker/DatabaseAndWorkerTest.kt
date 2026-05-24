@@ -5,15 +5,15 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.work.ListenableWorker
-import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.example.retiretracker.data.AppDatabase
 import com.example.retiretracker.data.Expense
 import com.example.retiretracker.worker.DailyUpdateWorker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -36,7 +36,11 @@ class DatabaseAndWorkerTest {
     }
 
     @Test
-    fun worker_runs_successfully() = runBlocking {
+    fun worker_runs_successfully_when_no_holdings_exist() = runBlocking {
+        withContext(Dispatchers.IO) {
+            AppDatabase.get(context).clearAllTables()
+        }
+
         val worker = TestListenableWorkerBuilder<DailyUpdateWorker>(context).build()
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.success()::class, result::class)
